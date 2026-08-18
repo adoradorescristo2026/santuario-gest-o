@@ -1,9 +1,0 @@
-{
-  "name": "santuario-gestao-web-sync-server",
-  "version": "1.4.3",
-  "private": true,
-  "description": "Santuário Gestão Web + servidor de sincronização criptografada",
-  "main": "server.js",
-  "scripts": {"start":"node server.js"},
-  "engines": {"node": ">=20"}
-}
