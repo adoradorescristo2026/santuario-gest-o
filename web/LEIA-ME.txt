@@ -1,0 +1,12 @@
+SANTUÁRIO GESTÃO V4.11.6
+
+CORREÇÕES PRINCIPAIS
+- Largura e altura da moldura de recorte são independentes.
+- Puxadores laterais alteram somente um eixo.
+- A imagem não é reajustada automaticamente quando a moldura muda.
+- Editar, substituir e remover imagens atualiza o dado do formulário imediatamente.
+- Imagens são compactadas antes da gravação.
+- Persistência do sistema foi otimizada para não duplicar imagens nas filiais.
+
+INICIALIZAÇÃO
+Abra INICIAR_SISTEMA.bat no Windows ou use SERVIDOR_LOCAL.ps1.
