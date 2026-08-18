@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b2435">
+  <title>Tesouraria Externa — Ponto de Venda V1.4.0</title>
+  <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/app.css">
+  <link rel="stylesheet" href="assets/css/tesouraria.css">
+</head>
+<body class="external-pos-page">
+  <header class="pos-header">
+    <div class="pos-brand"><div class="brand-emblem small"><span></span></div><div><strong id="posChurchName">Santuário Gestão</strong><small>Tesouraria Externa · Ponto de Venda</small></div></div>
+    <div class="pos-session-identity"><span id="posCashStatus" class="pos-status closed">CAIXA FECHADO</span><div><small>EVENTO / PONTO</small><strong id="posEventName">Nenhum caixa aberto</strong><span id="posSaleType" class="pos-sale-type-indicator">TIPO DE VENDA NÃO DEFINIDO</span></div><div class="pos-operator"><small>OPERADOR</small><strong id="posOperator">—</strong></div></div>
+    <div class="pos-header-actions"><button id="posThemeBtn" class="treasury-round-button" type="button">◐</button><button id="posChoiceBtn" class="treasury-outline-button" type="button">Operações</button><button id="posOpenBtn" class="pos-header-primary" type="button">Abrir caixa</button><button id="posCloseBtn" class="treasury-danger-button" type="button" hidden>Fechar caixa</button></div>
+  </header>
+
+  <main class="pos-shell">
+    <section class="pos-command-bar">
+      <div class="pos-code-box"><label for="productCode">CÓDIGO DO ITEM</label><div><input id="productCode" inputmode="numeric" autocomplete="off" placeholder="Digite ou leia o código"><button id="addByCodeBtn" type="button">Adicionar</button></div><small>Pressione Enter para incluir o produto no carrinho.</small></div>
+      <div id="productPreview" class="pos-product-preview"><span class="preview-placeholder">A informação do item aparecerá aqui.</span></div>
+      <div class="pos-command-actions"><button id="manageProductsBtn" type="button">Produtos e estoque</button><button id="cashAdjustmentBtn" type="button">Sangria / suprimento</button></div>
+    </section>
+
+    <div class="pos-layout">
+      <section class="pos-catalog-panel">
+        <header><div><span class="treasury-kicker dark">CATÁLOGO</span><h1>Itens disponíveis</h1></div><label class="pos-search"><span>⌕</span><input id="catalogSearch" type="search" placeholder="Buscar produto"></label></header>
+        <div class="pos-catalog-scroll">
+          <div id="catalogCategories" class="pos-category-filter"></div>
+          <div id="productCatalog" class="pos-product-grid"></div>
+        </div>
+        <section class="pos-payment-direct" aria-label="Formas de pagamento">
+          <div class="pos-payment-direct-title"><span>FORMAS DE PAGAMENTO</span><small>Selecione para continuar a venda</small></div>
+          <div id="posPaymentMethods" class="pos-payment-direct-grid">
+            <button type="button" data-quick-payment="PIX" disabled><strong>PIX</strong><small>Físico ou digital</small></button>
+            <button type="button" data-quick-payment="Dinheiro" disabled><strong>DINHEIRO</strong><small>Recebimento em espécie</small></button>
+            <button type="button" data-quick-payment="Cartão de débito" disabled><strong>DÉBITO</strong><small>Pagamento no débito</small></button>
+            <button type="button" data-quick-payment="Cartão de crédito" disabled><strong>CRÉDITO</strong><small>Escolher parcelamento</small></button>
+            <button type="button" data-quick-payment="Marcar venda" disabled><strong>MARCAR</strong><small>Pagamento posterior</small></button>
+          </div>
+        </section>
+      </section>
+
+      <aside class="pos-cart-panel">
+        <header><div><span class="treasury-kicker dark">VENDA ATUAL</span><h2>Carrinho</h2></div><button id="clearCartBtn" type="button">Limpar</button></header>
+        <div id="posCartList" class="pos-cart-list"></div>
+        <div class="pos-discount-row"><label><span>Desconto autorizado</span><input id="saleDiscount" type="number" min="0" step="0.01" value="0"></label></div>
+        <div class="pos-totals"><div><span>Subtotal</span><strong id="posSubtotal">R$ 0,00</strong></div><div><span>Desconto</span><strong id="posDiscountView">− R$ 0,00</strong></div><div class="grand-total"><span>TOTAL</span><strong id="posGrandTotal">R$ 0,00</strong></div></div>
+      </aside>
+    </div>
+
+  </main>
+
+  <div id="posModalBackdrop" class="treasury-modal-backdrop" hidden><div class="treasury-modal pos-modal" role="dialog" aria-modal="true"><header><div><span id="posModalKicker" class="treasury-kicker dark"></span><h2 id="posModalTitle"></h2><p id="posModalSubtitle"></p></div><button id="closePosModal" type="button">×</button></header><div id="posModalBody"></div></div></div>
+  <div id="treasuryToastRegion" class="treasury-toast-region" aria-live="polite"></div>
+
+  <script src="assets/js/web-sync.js?v=14300"></script><script src="assets/js/data.js"></script><script src="assets/js/currency-mask.js?v=4102"></script><script src="assets/js/form-fields.js?v=4102"></script><script src="assets/js/treasury-common.js"></script><script src="assets/js/treasury-external.js"></script>
+</body>
+</html>
