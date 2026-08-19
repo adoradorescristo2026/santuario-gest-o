@@ -209,32 +209,124 @@
     }catch(_){throw new Error('Não foi possível descriptografar os dados. Confirme a chave de criptografia.');}
   }
 
-  async function request(method,url,body=null,config=readConfig()) {
-    const headers={'Accept':'application/json','Authorization':`Bearer ${config.accessToken}`};
-    if(body!==null)headers['Content-Type']='application/json';
+  function supabaseHeaders(config, hasBody = false, prefer = '') {
+    const headers = {
+      'Accept': 'application/json',
+      'apikey': config.accessToken,
+      'Authorization': `Bearer ${config.accessToken}`
+    };
+    if (hasBody) headers['Content-Type'] = 'application/json';
+    if (prefer) headers['Prefer'] = prefer;
+    return headers;
+  }
+
+  async function supabaseRequest(method, path, body = null, config = readConfig(), prefer = '') {
+    const url = `${config.serverUrl.replace(/\/+$/, '')}/rest/v1/${path}`;
     let response;
-    try{response=await fetch(url,{method,headers,body:body===null?undefined:JSON.stringify(body),cache:'no-store'});}catch(_){throw new Error('Não foi possível acessar o servidor online.');}
-    let data={};try{data=await response.json();}catch(_){data={};}
-    return {status:response.status,data};
+    try {
+      response = await fetch(url, {
+        method,
+        headers: supabaseHeaders(config, body !== null, prefer),
+        body: body === null ? undefined : JSON.stringify(body),
+        cache: 'no-store'
+      });
+    } catch (_) {
+      throw new Error('Não foi possível acessar o Supabase. Verifique a internet e a URL do projeto.');
+    }
+
+    let data = null;
+    const text = await response.text();
+    if (text) {
+      try { data = JSON.parse(text); } catch (_) { data = text; }
+    }
+    return { status: response.status, data };
   }
 
-  async function pullRaw(config=readConfig()) {
-    if(!configured(config))throw new Error('Sincronização online não configurada.');
-    const endpoint=`${config.serverUrl}/api/v1/state/${encodeURIComponent(config.workspaceId)}`;
-    const res=await request('GET',endpoint,null,config);
-    if(res.status===404)return{exists:false,revision:0,state:null,updatedAt:'',clientId:''};
-    if(res.status<200||res.status>=300)throw new Error(res.data?.error||`Servidor online respondeu HTTP ${res.status}.`);
-    const state=await decryptState(res.data.payload,config);
-    return{exists:true,revision:Number(res.data.revision||0),state,updatedAt:String(res.data.updatedAt||''),clientId:String(res.data.clientId||'')};
+  async function pullRaw(config = readConfig()) {
+    if (!configured(config)) throw new Error('Sincronização online não configurada.');
+    const wid = encodeURIComponent(config.workspaceId);
+    const path = `santuario_sync?workspace_id=eq.${wid}&select=workspace_id,revision,payload,client_id,updated_at&limit=1`;
+    const res = await supabaseRequest('GET', path, null, config);
+    if (res.status < 200 || res.status >= 300) {
+      const msg = res.data?.message || res.data?.error || `Supabase respondeu HTTP ${res.status}.`;
+      throw new Error(msg);
+    }
+    const row = Array.isArray(res.data) ? res.data[0] : null;
+    if (!row) return { exists:false, revision:0, state:null, updatedAt:'', clientId:'' };
+    const state = await decryptState(row.payload, config);
+    return {
+      exists:true,
+      revision:Number(row.revision || 0),
+      state,
+      updatedAt:String(row.updated_at || ''),
+      clientId:String(row.client_id || '')
+    };
   }
 
-  async function pushRaw(state,baseRevision,config=readConfig()) {
-    if(!configured(config))throw new Error('Sincronização online não configurada.');
-    const endpoint=`${config.serverUrl}/api/v1/state/${encodeURIComponent(config.workspaceId)}`;
-    const res=await request('PUT',endpoint,{baseRevision:Number(baseRevision||0),payload:await encryptState(state,config),clientId:config.clientId},config);
-    if(res.status===409)return{ok:false,conflict:true,revision:Number(res.data?.revision||0)};
-    if(res.status<200||res.status>=300)throw new Error(res.data?.error||`Servidor online respondeu HTTP ${res.status}.`);
-    return{ok:true,revision:Number(res.data.revision||0),updatedAt:String(res.data.updatedAt||'')};
+  async function pushRaw(state, baseRevision, config = readConfig()) {
+    if (!configured(config)) throw new Error('Sincronização online não configurada.');
+
+    const now = new Date().toISOString();
+    const payload = await encryptState(state, config);
+    const nextRevision = Number(baseRevision || 0) + 1;
+
+    // Primeira gravação do workspace.
+    if (Number(baseRevision || 0) === 0) {
+      const create = await supabaseRequest(
+        'POST',
+        'santuario_sync',
+        {
+          workspace_id: config.workspaceId,
+          revision: 1,
+          payload,
+          client_id: config.clientId,
+          updated_at: now
+        },
+        config,
+        'return=representation'
+      );
+
+      if (create.status === 409) {
+        const current = await pullRaw(config);
+        return { ok:false, conflict:true, revision:Number(current.revision || 0) };
+      }
+      if (create.status < 200 || create.status >= 300) {
+        const msg = create.data?.message || create.data?.error || `Supabase respondeu HTTP ${create.status}.`;
+        throw new Error(msg);
+      }
+      const row = Array.isArray(create.data) ? create.data[0] : create.data;
+      return { ok:true, revision:Number(row?.revision || 1), updatedAt:String(row?.updated_at || now) };
+    }
+
+    // Atualização otimista: só altera se a revisão remota ainda for a mesma
+    // que este computador leu. Se outro dispositivo gravou antes, retorna conflito.
+    const wid = encodeURIComponent(config.workspaceId);
+    const rev = encodeURIComponent(String(baseRevision));
+    const update = await supabaseRequest(
+      'PATCH',
+      `santuario_sync?workspace_id=eq.${wid}&revision=eq.${rev}`,
+      {
+        revision: nextRevision,
+        payload,
+        client_id: config.clientId,
+        updated_at: now
+      },
+      config,
+      'return=representation'
+    );
+
+    if (update.status < 200 || update.status >= 300) {
+      const msg = update.data?.message || update.data?.error || `Supabase respondeu HTTP ${update.status}.`;
+      throw new Error(msg);
+    }
+
+    const row = Array.isArray(update.data) ? update.data[0] : null;
+    if (!row) {
+      const current = await pullRaw(config);
+      return { ok:false, conflict:true, revision:Number(current.revision || 0) };
+    }
+
+    return { ok:true, revision:Number(row.revision || nextRevision), updatedAt:String(row.updated_at || now) };
   }
 
   function threeWayMerge(base,local,remote) {
@@ -298,14 +390,17 @@
   function restartPolling(){clearInterval(pollTimer);pollTimer=null;readyForPush=false;if(!configured(readConfig()))return;pollOnce();pollTimer=setInterval(()=>pollOnce(),POLL_MS);}
 
   async function testConnection(){
-    const cfg=readConfig();if(!configured(cfg))return{ok:false,error:'Preencha servidor, espaço, token e chave de criptografia.'};
+    const cfg=readConfig();
+    if(!configured(cfg))return{ok:false,error:'Preencha URL do Supabase, código do espaço, chave pública (anon/publishable) e chave de criptografia.'};
     try{
-      // Testa uma rota autenticada: 200 e 404 significam que o token foi aceito.
-      const endpoint=`${cfg.serverUrl}/api/v1/state/${encodeURIComponent(cfg.workspaceId)}`;
-      const res=await request('GET',endpoint,null,cfg);
-      if(![200,404].includes(res.status))throw new Error(res.data?.error||`HTTP ${res.status}`);
-      lastError='';return{ok:true,server:{service:'Santuário Gestão Sync',authenticated:true}};
-    }catch(err){lastError=String(err?.message||err);return{ok:false,error:lastError};}
+      const res=await supabaseRequest('GET','santuario_sync?select=workspace_id&limit=1',null,cfg);
+      if(res.status<200||res.status>=300)throw new Error(res.data?.message||res.data?.error||`HTTP ${res.status}`);
+      lastError='';
+      return{ok:true,server:{service:'Supabase',authenticated:true}};
+    }catch(err){
+      lastError=String(err?.message||err);
+      return{ok:false,error:lastError};
+    }
   }
 
   const bridge={
