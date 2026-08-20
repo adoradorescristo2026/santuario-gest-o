@@ -257,17 +257,15 @@
     return window.santuarioDesktop.sendTreasuryNotification({eventType:type,recipients,payload:{...payload,churchName:payload.churchName||church.name||'Santuário Gestão'}}).catch(()=>({ok:false}));
   }
 
-  // V1.5.2 — no navegador, uma atualização da nuvem não deve recarregar
-  // a página inteira. Isso fazia a tela/modal de abertura do Caixa piscar
-  // continuamente enquanto o web-sync recebia revisões do Railway.
-  // O aplicativo desktop mantém o comportamento legado de recarga total.
-  if(window.santuarioDesktop?.onTreasuryRefresh){
-    window.santuarioDesktop.onTreasuryRefresh(()=>{
-      if(window.santuarioDesktop?.isWeb){
-        try{ window.dispatchEvent(new CustomEvent('santuario:treasury-remote-refresh')); }catch(_){}
-        return;
-      }
-      try{ location.reload(); }catch(_){}
+  // V1.5.3 — atualização remota da Tesouraria.
+  // IMPORTANTE: no navegador NUNCA registramos recarga completa da página.
+  // O web-sync atualiza o localStorage e notificamos as telas por evento.
+  // A recarga total fica restrita ao aplicativo Desktop nativo.
+  if(window.santuarioDesktop?.isDesktop && window.santuarioDesktop?.onTreasuryRefresh){
+    window.santuarioDesktop.onTreasuryRefresh(()=>{ try{ location.reload(); }catch(_){} });
+  }else if(window.santuarioDesktop?.isWeb && window.santuarioDesktop?.onTreasuryDataChanged){
+    window.santuarioDesktop.onTreasuryDataChanged(()=>{
+      try{ window.dispatchEvent(new CustomEvent('santuario:treasury-remote-refresh')); }catch(_){}
     });
   }
 
