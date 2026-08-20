@@ -1,4 +1,4 @@
-const CACHE = 'santuario-gestao-v1-4-3-web-sync';
+const CACHE = 'santuario-gestao-v1-4-4-railway-final';
 const ASSETS = [
   './', './index.html', './tesouraria-login.html', './tesouraria-verificacao.html', './tesouraria-painel.html', './tesouraria-interna.html', './tesouraria-interna-operacao.html', './tesouraria-externa.html', './tesouraria-extrato.html', './manifest.webmanifest',
   './assets/css/app.css', './assets/css/tesouraria.css', './assets/css/treasury-report.css',

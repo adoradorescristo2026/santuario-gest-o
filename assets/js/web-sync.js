@@ -1,3 +1,4 @@
+// PATCH V1.4.4 RAILWAY: restaurado do sincronizador original compatível com /api/v1/state/:workspace.
 (() => {
   'use strict';
 
