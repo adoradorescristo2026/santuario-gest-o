@@ -1,4 +1,4 @@
-const CACHE = 'santuario-gestao-v1-5-1-session-isolation';
+const CACHE = 'santuario-gestao-v1-5-2-caixa-web-stable';
 const ASSETS = [
   './', './index.html', './tesouraria-login.html', './tesouraria-verificacao.html', './tesouraria-painel.html', './tesouraria-interna.html', './tesouraria-interna-operacao.html', './tesouraria-externa.html', './tesouraria-extrato.html', './manifest.webmanifest',
   './assets/css/app.css', './assets/css/tesouraria.css', './assets/css/treasury-report.css',

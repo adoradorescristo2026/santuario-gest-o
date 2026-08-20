@@ -257,8 +257,18 @@
     return window.santuarioDesktop.sendTreasuryNotification({eventType:type,recipients,payload:{...payload,churchName:payload.churchName||church.name||'Santuário Gestão'}}).catch(()=>({ok:false}));
   }
 
+  // V1.5.2 — no navegador, uma atualização da nuvem não deve recarregar
+  // a página inteira. Isso fazia a tela/modal de abertura do Caixa piscar
+  // continuamente enquanto o web-sync recebia revisões do Railway.
+  // O aplicativo desktop mantém o comportamento legado de recarga total.
   if(window.santuarioDesktop?.onTreasuryRefresh){
-    window.santuarioDesktop.onTreasuryRefresh(()=>{ try{ location.reload(); }catch(_){} });
+    window.santuarioDesktop.onTreasuryRefresh(()=>{
+      if(window.santuarioDesktop?.isWeb){
+        try{ window.dispatchEvent(new CustomEvent('santuario:treasury-remote-refresh')); }catch(_){}
+        return;
+      }
+      try{ location.reload(); }catch(_){}
+    });
   }
 
   function activeExternalCash(data){ return data.externalCashSessions.find(item=>item.status==='Aberto')||null; }

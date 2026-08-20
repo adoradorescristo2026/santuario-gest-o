@@ -39,7 +39,46 @@
     $('#closePosModal').addEventListener('click',closeModal); $('#posModalBackdrop').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal();});
     document.addEventListener('submit',handleSubmit); document.addEventListener('click',handleGlobalClick); document.addEventListener('input',handleModalInput);
     setInterval(()=>{treasurySession=A.readTreasurySession(db);if(!treasurySession)location.replace('tesouraria-login.html');},30000);
-    window.addEventListener('storage',event=>{if(event.key!==A.KEYS.data)return;try{const fresh=A.loadData();const stillOpen=cash&&(fresh.externalCashSessions||[]).some(item=>item.id===cash.id&&item.status==='Aberto');if(cash&&!stillOpen){toast('Caixa encerrado','Esta operação foi encerrada por outro usuário. A tela será atualizada.','error');setTimeout(()=>location.href='tesouraria-painel.html',900);}}catch(_){}});
+
+    // V1.5.2 — Web: atualiza o estado em memória em vez de recarregar a página.
+    // Assim um formulário/modal aberto (principalmente ABERTURA DE CAIXA) não
+    // desaparece e reaparece a cada sincronização do Railway.
+    let remoteRefreshTimer=null;
+    const refreshFromSharedState=()=>{
+      if(!window.santuarioDesktop?.isWeb)return;
+      clearTimeout(remoteRefreshTimer);
+      remoteRefreshTimer=setTimeout(()=>{
+        try{
+          const fresh=A.loadData();
+          const previousCashId=cash?.id||'';
+          const hadCash=Boolean(cash);
+          const nextCash=A.activeExternalCash(fresh);
+
+          if(previousCashId&&!((fresh.externalCashSessions||[]).some(item=>item.id===previousCashId&&item.status==='Aberto'))){
+            toast('Caixa encerrado','Esta operação foi encerrada por outro usuário.','error');
+            setTimeout(()=>location.href='tesouraria-painel.html',900);
+            return;
+          }
+
+          Object.keys(db).forEach(key=>delete db[key]);
+          Object.assign(db,fresh);
+          treasurySession=A.readTreasurySession(db);
+          if(!treasurySession){location.replace('tesouraria-login.html');return;}
+          cash=nextCash;
+          render();
+
+          // Se outro terminal acabou de abrir um caixa enquanto este navegador
+          // ainda mostrava o formulário de abertura, fecha somente esse modal.
+          if(!hadCash&&cash){
+            const openingForm=document.querySelector('[data-pos-form="open-cash"]');
+            if(openingForm){closeModal();toast('Caixa já aberto',`${cash.number} está em operação.`);}
+          }
+        }catch(_){}
+      },180);
+    };
+    window.addEventListener('santuario:treasury-remote-refresh',refreshFromSharedState);
+    window.santuarioDesktop?.onTreasuryDataChanged?.(refreshFromSharedState);
+    window.addEventListener('storage',event=>{if(event.key===A.KEYS.data)refreshFromSharedState();});
   }
   function handleGlobalClick(e){const b=e.target.closest('[data-pos-action]');if(!b)return;const a=b.dataset.posAction,id=b.dataset.id;if(a==='cancel-modal')closeModal();if(a==='pix-mode')openPaymentModal('PIX',{pixMode:b.dataset.mode});if(a==='pix-generate')generatePixQrFromForm();if(a==='pix-copy')copyPixCode();if(a==='credit-installment')openPaymentModal('Cartão de crédito',{creditInstallments:Number(b.dataset.installments||1)});if(a==='marked-customer-type')selectMarkedCustomerType(b.dataset.type);if(a==='cash-verify')openCashVerifyScreen();if(a==='adjustment-back')openAdjustmentModal();if(a==='sale-cancel')openCancelSale(id);if(a==='product-new')openProductForm();if(a==='product-edit')openProductForm(id);if(a==='product-toggle')toggleProduct(id);if(a==='tap-cancel')cancelActiveTap();}
 
