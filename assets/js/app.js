@@ -212,7 +212,10 @@
         const parsed=JSON.parse(raw);
         if(parsed?.version===3){
           const shaped=ensureDataShape(parsed);
-          const activeId=shaped.activeChurchDataId||shaped.churches?.find(church=>church.active!==false)?.id||shaped.churches?.[0]?.id;
+          // V1.5.1: a filial aberta pertence à sessão deste dispositivo/usuário.
+          // Nunca usamos a filial ativa recebida de outro computador como prioridade.
+          const localSessionChurchId=sessionStorage.getItem(CHURCH_SESSION_KEY)||'';
+          const activeId=(localSessionChurchId&&shaped.branchData?.[localSessionChurchId]?localSessionChurchId:'')||shaped.activeChurchDataId||shaped.churches?.find(church=>church.active!==false)?.id||shaped.churches?.[0]?.id;
           const branch=activeId&&shaped.branchData?.[activeId];
           if(branch) CHURCH_SCOPED_KEYS.forEach(key=>shaped[key]=clone(Array.isArray(branch[key])?branch[key]:[]));
           return shaped;
@@ -287,6 +290,10 @@
          coleções no nível principal, evitando duplicação de fotos em Base64 e estouro do localStorage. */
       const persisted=clone(db);
       CHURCH_SCOPED_KEYS.forEach(key=>persisted[key]=[]);
+      // V1.5.1: activeChurchDataId é estado de navegação local, não dado compartilhado.
+      // Mantê-lo na base online fazia um usuário trocar/expulsar a filial do outro.
+      persisted.activeChurchDataId='';
+      persisted.church={};
       localStorage.setItem(STORAGE_KEY,JSON.stringify(persisted));
       window.santuarioDesktop?.cloudStateChanged?.(persisted);
       return true;
@@ -352,9 +359,20 @@
   function refreshSharedTreasuryData(){
     try{
       const next=loadData();
-      const selected=currentChurchId||sessionStorage.getItem(CHURCH_SESSION_KEY)||next.activeChurchDataId;
-      if(selected&&next.branchData?.[selected]){
-        const branch=next.branchData[selected];CHURCH_SCOPED_KEYS.forEach(key=>next[key]=clone(Array.isArray(branch[key])?branch[key]:[]));next.activeChurchDataId=selected;const church=(next.churches||[]).find(item=>item.id===selected);if(church)next.church={...church};
+      // V1.5.1: a seleção de filial é exclusiva desta sessão.
+      // sessionStorage/currentChurchId sempre vencem qualquer estado vindo da nuvem.
+      const selected=sessionStorage.getItem(CHURCH_SESSION_KEY)||currentChurchId||'';
+      if(selected){
+        const church=(next.churches||[]).find(item=>item.id===selected&&item.active!==false);
+        if(church){
+          next.branchData=next.branchData||{};
+          if(!next.branchData[selected])next.branchData[selected]=emptyChurchData();
+          const branch=next.branchData[selected];
+          CHURCH_SCOPED_KEYS.forEach(key=>next[key]=clone(Array.isArray(branch[key])?branch[key]:[]));
+          next.activeChurchDataId=selected;
+          next.church={...church};
+          currentChurchId=selected;
+        }
       }
       db=next;
       applyTheme(db.uiPreferences?.theme||localStorage.getItem(THEME_KEY)||'light',false);
