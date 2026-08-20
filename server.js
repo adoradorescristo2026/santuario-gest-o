@@ -8,8 +8,7 @@ const crypto = require('crypto');
 const PORT = Math.max(1, Math.min(65535, Number(process.env.PORT || 8787)));
 const HOST = process.env.HOST || '0.0.0.0';
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data'));
-// Neste pacote os arquivos do site ficam na raiz do repositório GitHub.
-const WEB_ROOT = path.resolve(process.env.WEB_ROOT || __dirname);
+const WEB_ROOT = path.resolve(process.env.WEB_ROOT || path.join(__dirname, 'web'));
 const TOKEN = String(process.env.SANTUARIO_SYNC_TOKEN || '').trim();
 const MAX_BODY = 55 * 1024 * 1024;
 
@@ -25,7 +24,6 @@ const MIME = {
   '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.svg':'image/svg+xml', '.ico':'image/x-icon',
   '.webp':'image/webp', '.woff':'font/woff', '.woff2':'font/woff2', '.ttf':'font/ttf', '.pdf':'application/pdf'
 };
-const BLOCKED_ROOT_FILES = new Set(['server.js','package.json','package-lock.json','railway.json','railway.toml','.env','.env.example']);
 
 function baseHeaders(extra={}) {
   return {
@@ -33,7 +31,8 @@ function baseHeaders(extra={}) {
     'Referrer-Policy':'same-origin',
     'X-Frame-Options':'SAMEORIGIN',
     'Access-Control-Allow-Origin':'*',
-    'Access-Control-Allow-Headers':'Authorization, Content-Type',
+    'Access-Control-Allow-Headers':'Authorization, Content-Type, Accept',
+    'Access-Control-Max-Age':'86400',
     'Access-Control-Allow-Methods':'GET, PUT, OPTIONS',
     ...extra
   };
@@ -81,7 +80,6 @@ function safeWebFile(urlPath) {
   try { pathname=decodeURIComponent(urlPath || '/'); } catch (_) { return null; }
   if(pathname==='/' || pathname==='') pathname='/index.html';
   const normalized=path.normalize(pathname).replace(/^([/\\])+/, '');
-  if (!normalized || normalized.startsWith('.') || BLOCKED_ROOT_FILES.has(normalized) || normalized.startsWith('data'+path.sep)) return null;
   const absolute=path.resolve(WEB_ROOT,normalized);
   if(absolute!==WEB_ROOT && !absolute.startsWith(WEB_ROOT+path.sep))return null;
   return absolute;
@@ -92,6 +90,7 @@ function serveWeb(req,res,url) {
   try { if(fs.existsSync(file)&&fs.statSync(file).isDirectory())file=path.join(file,'index.html'); } catch (_) {}
   fs.readFile(file,(err,data)=>{
     if(err){
+      // Rotas desconhecidas do front-end voltam para a Home; arquivos com extensão continuam 404.
       if(err.code==='ENOENT' && !path.extname(url.pathname||'')){
         return fs.readFile(path.join(WEB_ROOT,'index.html'),(fallbackErr,fallback)=>{
           if(fallbackErr)return json(res,404,{ok:false,error:'Página não encontrada.'});
@@ -116,7 +115,7 @@ const server=http.createServer(async (req,res)=>{
       res.writeHead(204,baseHeaders({'Cache-Control':'no-store'}));return res.end();
     }
     if(req.method==='GET' && url.pathname==='/health'){
-      return json(res,200,{ok:true,service:'Santuario Gestao Web + Sync Server',version:'1.4.4',time:new Date().toISOString(),web:true});
+      return json(res,200,{ok:true,service:'Santuario Gestao Web + Sync Server',version:'1.4.5',time:new Date().toISOString(),web:true});
     }
 
     const match=url.pathname.match(/^\/api\/v1\/state\/([A-Za-z0-9._-]+)$/);
@@ -141,7 +140,7 @@ const server=http.createServer(async (req,res)=>{
 
     if(url.pathname.startsWith('/api/'))return json(res,404,{ok:false,error:'Rota de API não encontrada.'});
     if(serveWeb(req,res,url))return;
-    return json(res,404,{ok:false,error:'Página não encontrada.'});
+    return json(res,405,{ok:false,error:'Método não permitido.'});
   } catch (err) {
     if(err?.message==='PAYLOAD_TOO_LARGE')return json(res,413,{ok:false,error:'Dados excedem o limite de 55 MB.'});
     if(err?.message==='INVALID_JSON')return json(res,400,{ok:false,error:'JSON inválido.'});
@@ -150,7 +149,7 @@ const server=http.createServer(async (req,res)=>{
 });
 
 server.listen(PORT,HOST,()=>{
-  console.log(`Santuário Gestão Web + Sync V1.4.4 ativo em ${HOST}:${PORT}`);
+  console.log(`Santuário Gestão Web + Sync ativo em ${HOST}:${PORT}`);
   console.log(`Diretório de dados: ${DATA_DIR}`);
   console.log(`Aplicação web: ${WEB_ROOT}`);
 });
