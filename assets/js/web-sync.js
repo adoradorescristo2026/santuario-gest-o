@@ -5,7 +5,10 @@
   if (window.santuarioDesktop?.isDesktop) return;
 
   const DATA_KEY = 'santuarioGestaoV3Data';
-  const CONFIG_KEY = 'santuarioWebCloudSyncV1';
+  const CONFIG_KEY = 'santuarioWebCloudSyncV2';
+  const LEGACY_CONFIG_KEY = 'santuarioWebCloudSyncV1';
+  const DEFAULT_SUPABASE_URL = 'https://vzwkcwhydtotkteozwsm.supabase.co';
+  const DEFAULT_SUPABASE_KEY = 'sb_publishable_hObw6VjzlNJ1I5pcDBuC7A_7kMdUQ7V';
   const SYNC_CHANNEL = 'santuarioGestaoCloudSyncV1';
   const POLL_MS = 3000;
   const PUSH_DELAY_MS = 650;
@@ -41,16 +44,24 @@
     return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
   }
 
+  function normalizeSupabaseUrl(value) {
+    return String(value || '')
+      .trim()
+      .replace(/\/rest\/v1\/?$/i, '')
+      .replace(/\/+$/, '');
+  }
+
   function defaultServerUrl() {
-    return /^https?:$/i.test(location.protocol) ? location.origin : '';
+    return DEFAULT_SUPABASE_URL;
   }
 
   function normalizeConfig(input = {}, current = {}) {
+    const inputHasEnabled = Object.prototype.hasOwnProperty.call(input, 'enabled');
     return {
-      enabled: Boolean(input.enabled),
-      serverUrl: String(input.serverUrl || current.serverUrl || defaultServerUrl()).trim().replace(/\/+$/, ''),
+      enabled: inputHasEnabled ? Boolean(input.enabled) : Boolean(current.enabled),
+      serverUrl: normalizeSupabaseUrl(input.serverUrl || current.serverUrl || defaultServerUrl()),
       workspaceId: String(input.workspaceId || current.workspaceId || 'santuario-principal').trim().replace(/[^A-Za-z0-9._-]/g,'').slice(0,80),
-      accessToken: String(input.accessToken || '').trim() || String(current.accessToken || ''),
+      accessToken: String(input.accessToken || '').trim() || String(current.accessToken || '') || DEFAULT_SUPABASE_KEY,
       encryptionKey: String(input.encryptionKey || '') || String(current.encryptionKey || ''),
       clientId: String(current.clientId || input.clientId || randomId())
     };
@@ -59,11 +70,42 @@
   function readConfig() {
     try {
       const raw = localStorage.getItem(CONFIG_KEY);
-      const stored = raw ? JSON.parse(raw) : {};
-      if (!stored || typeof stored !== 'object') throw new Error('invalid');
-      return normalizeConfig({ ...stored, enabled:Boolean(stored.enabled) }, stored);
+      if (raw) {
+        const stored = JSON.parse(raw);
+        if (!stored || typeof stored !== 'object') throw new Error('invalid');
+        return normalizeConfig({ ...stored, enabled:Boolean(stored.enabled) }, stored);
+      }
+
+      // Migra apenas preferências locais úteis da versão anterior.
+      // A URL e a chave pública são sempre atualizadas para o novo projeto Supabase.
+      const legacyRaw = localStorage.getItem(LEGACY_CONFIG_KEY);
+      if (legacyRaw) {
+        const legacy = JSON.parse(legacyRaw);
+        const migrated = normalizeConfig({
+          enabled: Boolean(legacy?.enabled),
+          serverUrl: DEFAULT_SUPABASE_URL,
+          workspaceId: legacy?.workspaceId || 'santuario-principal',
+          accessToken: DEFAULT_SUPABASE_KEY,
+          encryptionKey: legacy?.encryptionKey || '',
+          clientId: legacy?.clientId || randomId()
+        });
+        localStorage.setItem(CONFIG_KEY, JSON.stringify(migrated));
+        return migrated;
+      }
+
+      return normalizeConfig({
+        enabled:false,
+        serverUrl:DEFAULT_SUPABASE_URL,
+        workspaceId:'santuario-principal',
+        accessToken:DEFAULT_SUPABASE_KEY
+      });
     } catch (_) {
-      return normalizeConfig({ enabled:false, serverUrl:defaultServerUrl(), workspaceId:'santuario-principal' });
+      return normalizeConfig({
+        enabled:false,
+        serverUrl:DEFAULT_SUPABASE_URL,
+        workspaceId:'santuario-principal',
+        accessToken:DEFAULT_SUPABASE_KEY
+      });
     }
   }
 
