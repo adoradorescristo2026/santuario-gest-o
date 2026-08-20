@@ -267,6 +267,9 @@
     });
     data.treasuryActiveSessions=data.treasuryActiveSessions.filter(item=>Number(item.expiresAt||0)>Date.now());
     data.transactions=(data.transactions||[]).map(t=>({...t,cashSessionId:t.cashSessionId||''}));
+    const localTheme=localStorage.getItem(THEME_KEY);
+    data.systemPreferences=(data.systemPreferences&&typeof data.systemPreferences==='object')?data.systemPreferences:{};
+    data.systemPreferences.theme=['light','dark'].includes(data.systemPreferences.theme)?data.systemPreferences.theme:(localTheme==='dark'?'dark':'light');
     return data;
   }
   function emptyChurchData(){ return Object.fromEntries(CHURCH_SCOPED_KEYS.map(key=>[key,[]])); }
@@ -355,6 +358,7 @@
         const branch=next.branchData[selected];CHURCH_SCOPED_KEYS.forEach(key=>next[key]=clone(Array.isArray(branch[key])?branch[key]:[]));next.activeChurchDataId=selected;const church=(next.churches||[]).find(item=>item.id===selected);if(church)next.church={...church};
       }
       db=next;
+      applyTheme(db?.systemPreferences?.theme||localStorage.getItem(THEME_KEY)||'light',{sync:false});
       const sessionId=sessionStorage.getItem(SESSION_KEY);if(sessionId)currentUser=db.users.find(user=>user.id===sessionId&&user.active)||currentUser;
       const shell=$('#appShell'),modal=$('#modalBackdrop'),areaGate=$('#areaGate'),churchGate=$('#churchGate');
       // V1.4.2: atualizar a base compartilhada sem trocar a navegação local deste computador.
@@ -375,7 +379,7 @@
   }
 
   function init(){
-    bindEvents(); bindTreasuryDesktopSync(); applyTheme(localStorage.getItem(THEME_KEY)||'light');
+    bindEvents(); bindTreasuryDesktopSync(); applyTheme(db?.systemPreferences?.theme||localStorage.getItem(THEME_KEY)||'light',{sync:false});
     localStorage.removeItem(SESSION_KEY);
     const params=new URLSearchParams(location.search);
     if(params.get('nova_sessao')==='1'){
@@ -1446,7 +1450,7 @@ ${linkedUsers.length} usuário(s) estão vinculados a esta igreja e ficarão sem
   function openSearch(){$('#globalSearchPanel').hidden=false;$('#globalSearchInput').value='';renderSearchResults();setTimeout(()=>$('#globalSearchInput').focus(),20)}function closeSearch(){$('#globalSearchPanel').hidden=true}
   function renderSearchResults(){const q=normalize($('#globalSearchInput').value);if(!q){$('#globalSearchResults').innerHTML='<div class="search-empty">Digite para pesquisar pessoas, eventos, lançamentos e documentos.</div>';return;}const groups=[['Pessoas',db.members.filter(x=>normalize(`${x.name} ${x.phone} ${x.email}`).includes(q)).slice(0,6).map(x=>[x.name,`${x.type} · ${x.status}`,'people'])],['Eventos',db.events.filter(x=>normalize(`${x.title} ${x.location}`).includes(q)).slice(0,6).map(x=>[x.title,`${dateBR(x.date)} · ${x.location}`,'agenda'])],['Financeiro',db.transactions.filter(x=>normalize(`${x.description} ${x.category}`).includes(q)).slice(0,6).map(x=>[x.description,`${dateBR(x.date)} · ${money(x.amount)}`,'transactions'])],['Documentos',db.documents.filter(x=>normalize(`${x.title} ${x.reference}`).includes(q)).slice(0,6).map(x=>[x.title,x.reference,'documents'])],['Biblioteca',db.issuedDocuments.filter(x=>normalize(`${x.protocol} ${x.memberName||''} ${documentTemplate(x.templateId).title}`).includes(q)).slice(0,6).map(x=>[documentTemplate(x.templateId).title,`${x.protocol} · ${x.memberName||''}`,'library-issue'])]];$('#globalSearchResults').innerHTML=groups.filter(g=>g[1].length).map(([title,items])=>`<section class="search-group"><h3>${title}</h3>${items.map(([a,b,module])=>`<div class="search-result" data-action="search-open" data-value="${module}"><div><strong>${esc(a)}</strong><small>${esc(b)}</small></div>${icon('i-chevron')}</div>`).join('')}</section>`).join('')||'<div class="search-empty">Nenhum resultado encontrado.</div>';}
 
-  function toggleTheme(){applyTheme(document.body.classList.contains('dark')?'light':'dark')}function applyTheme(theme){document.body.classList.toggle('dark',theme==='dark');localStorage.setItem(THEME_KEY,theme);const toggle=$('#themeToggleBtn');if(toggle)toggle.innerHTML=icon(theme==='dark'?'i-sun':'i-moon');if(currentChurchId&&$('#churchGate')?.hidden)applyChurchTheme(activeChurch());else clearChurchTheme();}
+  function toggleTheme(){applyTheme(document.body.classList.contains('dark')?'light':'dark')}function applyTheme(theme,{sync=true}={}){theme=theme==='dark'?'dark':'light';document.body.classList.toggle('dark',theme==='dark');localStorage.setItem(THEME_KEY,theme);if(db){db.systemPreferences=(db.systemPreferences&&typeof db.systemPreferences==='object')?db.systemPreferences:{};const changed=db.systemPreferences.theme!==theme;db.systemPreferences.theme=theme;if(changed&&sync)saveData();}const toggle=$('#themeToggleBtn');if(toggle)toggle.innerHTML=icon(theme==='dark'?'i-sun':'i-moon');if(currentChurchId&&$('#churchGate')?.hidden)applyChurchTheme(activeChurch());else clearChurchTheme();}
   function download(filename,content,type='text/plain'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
   function exportCSV(filename,rows){if(!rows.length){showToast('Nada para exportar','A listagem está vazia.');return;}const headers=Object.keys(rows[0]),line=v=>`"${String(v??'').replaceAll('"','""')}"`;download(filename,'\uFEFF'+[headers.map(line).join(';'),...rows.map(r=>headers.map(h=>line(r[h])).join(';'))].join('\n'),'text/csv;charset=utf-8')}
   function exportTransactions(){exportCSV('movimentacoes.csv',db.transactions.map(t=>({data:t.date,tipo:t.type,descricao:t.description,categoria:t.category,centro:t.costCenter,conta:byId('accounts',t.accountId)?.name,valor:t.amount,documento:t.document})))}

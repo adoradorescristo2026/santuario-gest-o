@@ -429,6 +429,22 @@
     }catch(err){readyForPush=false;lastError=String(err?.message||err);return{ok:false,error:lastError};}
   }
 
+  async function bootstrapCloudSync(){
+    const config=readConfig();if(!configured(config))return{ok:false,skipped:true};
+    const local=readLocalState();
+    const remote=await pullRaw(config);
+    if(!remote.exists){
+      if(!local){readyForPush=true;return{ok:true,exists:false,empty:true};}
+      const pushed=await pushRaw(local,0,config);
+      if(!pushed.ok)throw new Error('Não foi possível criar o espaço online.');
+      baseState=deepClone(local);remoteRevision=pushed.revision;lastSyncAt=pushed.updatedAt||new Date().toISOString();lastError='';readyForPush=true;
+      return{ok:true,exists:true,created:true,revision:pushed.revision};
+    }
+    baseState=deepClone(remote.state);remoteRevision=remote.revision;lastSyncAt=remote.updatedAt||new Date().toISOString();lastError='';readyForPush=true;
+    if(!jsonEqual(local,remote.state))applyRemoteState(remote.state);
+    return{ok:true,exists:true,downloaded:true,revision:remote.revision};
+  }
+
   function restartPolling(){clearInterval(pollTimer);pollTimer=null;readyForPush=false;if(!configured(readConfig()))return;pollOnce();pollTimer=setInterval(()=>pollOnce(),POLL_MS);}
 
   async function testConnection(){
@@ -452,8 +468,15 @@
     versions:{browser:navigator.userAgent},
     cloudSyncStatus:async()=>publicStatus(),
     saveCloudSyncConfig:async(payload={})=>{
-      try{const cfg=writeConfig(payload);baseState=null;remoteRevision=0;lastError='';restartPolling();if(configured(cfg)){const test=await testConnection();if(!test.ok)throw new Error(test.error);}return publicStatus();}
-      catch(err){lastError=String(err?.message||err);return{ok:false,error:lastError,...publicStatus()};}
+      try{
+        const cfg=writeConfig(payload);baseState=null;remoteRevision=0;lastError='';
+        if(configured(cfg)){
+          const test=await testConnection();if(!test.ok)throw new Error(test.error);
+          await bootstrapCloudSync();
+        }
+        restartPolling();
+        return publicStatus();
+      }catch(err){lastError=String(err?.message||err);return{ok:false,error:lastError,...publicStatus()};}
     },
     testCloudSync:testConnection,
     publishLocalToCloud:async()=>{try{const state=readLocalState();if(!state)throw new Error('Não foi possível ler os dados locais.');readyForPush=true;baseState=null;const result=await publishState(state);restartPolling();return{ok:true,...result,...publicStatus()};}catch(err){lastError=String(err?.message||err);return{ok:false,error:lastError};}},
